@@ -353,6 +353,16 @@
             appId: "1:604804207720:web:72357641aa7317825a97dd"
         };
         firebase.initializeApp(firebaseConfig);
+        // Handle Google redirect result when the page loads
+auth.getRedirectResult().then((result) => {
+    if (result) {
+        // User successfully signed in via redirect
+        console.log('Google sign-in redirect successful');
+    }
+}).catch((error) => {
+    console.error('Redirect sign-in error:', error);
+    toast('Sign-in failed: ' + error.message, 'error');
+});
         const auth = firebase.auth();
         const db = firebase.firestore();
         const rtdb = firebase.database();
