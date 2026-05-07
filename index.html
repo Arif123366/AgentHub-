@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentHub — AI Agent Marketplace</title>
+
+    <!-- Firebase Compat SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+    <style>
+        :root {
+            --bg: #0b0f19;
+            --surface: #131a26;
+            --card: #1a2133;
+            --glass: rgba(18, 23, 35, 0.75);
+            --input: #1f273a;
+            --border: #2a3347;
+            --text: #eef2f6;
+            --text2: #9aa1b0;
+            --muted: #6b7280;
+            --accent: #6c5ce7;
+            --accent2: #7d6ff0;
+            --glow: rgba(108, 92, 231, 0.3);
+            --green: #2dd4bf;
+            --greenBg: rgba(45,212,191,0.12);
+            --orange: #f59e0b;
+            --red: #f87171;
+            --yellow: #facc15;
+            --yellowBg: rgba(250,204,21,0.15);
+            --shadow: 0 8px 32px rgba(0,0,0,0.5);
+            --radius: 14px;
+            --trans: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --font: 'Inter', system-ui, -apple-system, sans-serif;
+            --sidebar-w: 260px;
+            --topbar-h: 64px;
+        }
+        [data-theme="light"] {
+            --bg: #f8fafc;
+            --surface: #fff;
+            --card: #fff;
+            --glass: rgba(255,255,255,0.85);
+            --input: #f1f5f9;
+            --border: #e2e8f0;
+            --text: #0f172a;
+            --text2: #475569;
+            --muted: #94a3b8;
+            --accent: #4f46e5;
+            --shadow: 0 8px 32px rgba(0,0,0,0.05);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        html { font-size:15px; scroll-behavior:smooth; }
+        body { font-family:var(--font); background:var(--bg); color:var(--text); min-height:100vh; transition:background var(--trans); }
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-thumb { background:var(--border); }
+
+        @keyframes fadeInUp {
+            from { opacity:0; transform:translateY(16px); }
+            to { opacity:1; transform:translateY(0); }
+        }
+        @keyframes pulse {
+            0%,100% { opacity:1; }
+            50% { opacity:0.5; }
+        }
+        @keyframes blink {
+            0%,100% { opacity:1; }
+            50% { opacity:0; }
+        }
+        .animate-fade-in-up { animation: fadeInUp 0.4s ease forwards; }
+        .badge-pending { background:var(--yellowBg); color:var(--yellow); animation: pulse 1.5s infinite; }
+
+        .sidebar {
+            position:fixed; top:0; left:0; bottom:0; width:var(--sidebar-w);
+            background:var(--surface); border-right:1px solid var(--border);
+            z-index:100; display:flex; flex-direction:column; transition:transform 0.3s;
+        }
+        .sidebar.mobile-open { transform:translateX(0)!important; }
+        @media (max-width:1024px) {
+            .sidebar { transform:translateX(-100%); }
+            .sidebar.mobile-open { transform:translateX(0); }
+        }
+        .sidebar.collapsed { width:70px; }
+        .sidebar-brand {
+            display:flex; align-items:center; justify-content:space-between;
+            padding:16px 20px; height:var(--topbar-h); border-bottom:1px solid var(--border);
+        }
+        .sidebar-brand .logo-area { display:flex; align-items:center; gap:10px; }
+        .sidebar-brand .logo {
+            width:36px; height:36px; border-radius:10px;
+            background:linear-gradient(135deg,var(--accent),#8b5cf6);
+            display:flex; align-items:center; justify-content:center;
+            font-size:18px; color:#fff; font-weight:700;
+        }
+        .sidebar-close-btn {
+            display:none; background:none; border:none; color:var(--text2); font-size:1.5rem; cursor:pointer;
+        }
+        @media (max-width:1024px) { .sidebar-close-btn { display:block; } }
+
+        .sidebar-nav { flex:1; padding:12px; display:flex; flex-direction:column; gap:4px; overflow-y:auto; }
+        .nav-item {
+            display:flex; align-items:center; gap:10px; padding:10px 14px;
+            border-radius:8px; cursor:pointer; color:var(--text2); font-weight:500;
+            white-space:nowrap; font-size:0.9rem; transition:all var(--trans);
+        }
+        .nav-item:hover { background:var(--input); color:var(--text); }
+        .nav-item.active { background:var(--accent); color:#fff; box-shadow:0 0 20px var(--glow); }
+        .main-area {
+            margin-left:var(--sidebar-w); transition:margin-left 0.3s;
+            min-height:100vh; display:flex; flex-direction:column;
+        }
+        .sidebar.collapsed~.main-area { margin-left:70px; }
+        @media (max-width:1024px) { .main-area { margin-left:0!important; } }
+        .topbar {
+            height:var(--topbar-h); border-bottom:1px solid var(--border);
+            display:flex; align-items:center; justify-content:space-between;
+            padding:0 24px; background:var(--glass); backdrop-filter:blur(12px);
+            position:sticky; top:0; z-index:50;
+        }
+        .content { flex:1; padding:24px; }
+        .panel { display:none; animation:fadeSlide 0.3s; }
+        .panel.active { display:block; }
+        @keyframes fadeSlide { from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:translateY(0);} }
+
+        .card { background:var(--glass); backdrop-filter:blur(14px); border:1px solid var(--border); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); transition:box-shadow var(--trans), transform 0.2s; }
+        .card:hover { box-shadow:0 12px 40px rgba(0,0,0,0.6); transform:translateY(-2px); }
+        .card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; }
+        .stat-value { font-size:2rem; font-weight:800; }
+        .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; font-weight:600; cursor:pointer; border:none; font-family:var(--font); transition:all var(--trans); font-size:0.9rem; }
+        .btn-primary { background:var(--accent); color:#fff; }
+        .btn-primary:hover { background:var(--accent2); box-shadow:0 0 20px var(--glow); transform:translateY(-1px); }
+        .btn-outline { background:transparent; border:1px solid var(--border); color:var(--text); }
+        .btn-outline:hover { border-color:var(--accent); color:var(--accent); }
+        .btn-danger { background:var(--red); color:#fff; }
+        .btn-sm { padding:6px 12px; font-size:0.8rem; }
+        .input-group { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+        .input-group label { font-weight:600; font-size:0.85rem; color:var(--text2); }
+        .input-group input, .input-group textarea, .input-group select { background:var(--input); border:1px solid var(--border); border-radius:8px; padding:10px 14px; color:var(--text); font-family:var(--font); outline:none; width:100%; transition:border var(--trans); }
+        .input-group input:focus, .input-group textarea:focus, .input-group select:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--glow); }
+        .badge { padding:4px 10px; border-radius:20px; font-size:0.75rem; font-weight:600; }
+        .badge-green { background:var(--greenBg); color:var(--green); }
+        .badge-purple { background:rgba(139,92,246,0.15); color:#a78bfa; }
+        .badge-orange { background:rgba(245,158,11,0.15); color:var(--orange); }
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; display:flex; align-items:center; justify-content:center; }
+        .modal { background:var(--card); border-radius:16px; padding:24px; width:90%; max-width:500px; box-shadow:var(--shadow); }
+        .toast { position:fixed; top:20px; right:20px; z-index:300; padding:12px 20px; border-radius:8px; font-weight:600; box-shadow:var(--shadow); animation:slideIn 0.3s; }
+        .toast-success { background:#065f46; color:#d1fae5; }
+        @keyframes slideIn { from{transform:translateX(100%);opacity:0;} }
+        .mobile-menu-btn { display:none; width:34px; height:34px; border-radius:8px; border:1px solid var(--border); background:var(--card); cursor:pointer; font-size:1.2rem; align-items:center; justify-content:center; color:var(--text2); }
+        @media (max-width:1024px) { .mobile-menu-btn { display:flex!important; } }
+        .sidebar-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:99; }
+        @media (max-width:1024px) { .sidebar-overlay.show { display:block; } }
+        .stream-text { border-left:2px solid var(--accent); padding-left:10px; position:relative; }
+        .typewriter-cursor { display:inline-block; width:2px; height:1em; background:var(--accent); animation:blink 0.7s infinite; margin-left:2px; vertical-align:middle; }
+        .avatar-preview { width:60px; height:60px; border-radius:50%; object-fit:cover; margin-bottom:12px; }
+        .file-upload-wrapper { position:relative; overflow:hidden; display:inline-block; }
+        .file-upload-wrapper input[type=file] { position:absolute; left:-9999px; }
+        .file-upload-trigger { display:flex; align-items:center; gap:6px; }
+        .selected-file-name { font-size:0.8rem; color:var(--text2); margin-left:8px; }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar Overlay (mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <div class="logo-area"><div class="logo">AH</div><span style="font-weight:700;font-size:1.2rem;">AgentHub</span></div>
+            <button class="sidebar-close-btn" onclick="closeMobileSidebar()">×</button>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item active" data-panel="dashboard" onclick="navigate('dashboard',this)"><span>📊</span> Dashboard</div>
+            <div class="nav-item" data-panel="marketplace" onclick="navigate('marketplace',this)"><span>🛒</span> Marketplace</div>
+            <div class="nav-item" data-panel="create" onclick="navigate('create',this)"><span>⚡</span> Create Agent</div>
+            <div class="nav-item" data-panel="run" onclick="navigate('run',this)"><span>▶️</span> Run Agent</div>
+            <div class="nav-item" data-panel="admin" id="adminNav" style="display:none;" onclick="navigate('admin',this)"><span>🛡️</span> Admin</div>
+        </nav>
+        <div style="padding:12px;border-top:1px solid var(--border);">
+            <div class="nav-item" onclick="confirmLogout()"><span>🚪</span> Logout</div>
+        </div>
+    </aside>
+
+    <!-- Main Area -->
+    <div class="main-area">
+        <header class="topbar">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <button class="mobile-menu-btn" onclick="toggleMobileSidebar()">☰</button>
+                <h2 id="pageTitle">Dashboard</h2>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <button class="btn btn-outline btn-sm" onclick="toggleTheme()" id="themeBtn">🌙</button>
+                <div id="userAvatar" onclick="openProfile()" style="width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;cursor:pointer;overflow:hidden;"></div>
+            </div>
+        </header>
+
+        <div class="content" id="contentArea">
+            <!-- Dashboard Panel -->
+            <div class="panel active" id="panel-dashboard">
+                <div class="card-grid" style="margin-bottom:24px;">
+                    <div class="card"><div class="stat-value" id="statRuns">0</div><div>Total Runs</div></div>
+                    <div class="card"><div class="stat-value" id="statAgents">0</div><div>Published Agents</div></div>
+                    <div class="card"><div class="stat-value" id="statMyAgents">0</div><div>My Agents</div></div>
+                    <div class="card"><div id="statApi">No keys</div><div>API Keys Status</div></div>
+                </div>
+                <div class="card"><h3>🔑 API Keys (BYOK)</h3><div id="apikeysList" style="margin:10px 0;"></div><button class="btn btn-primary" onclick="openApiKeyModal()">+ Add Key</button></div>
+                <div class="card" style="margin-top:16px;"><h3>📋 Recent Usage</h3><div id="recentUsage"></div></div>
+            </div>
+
+            <!-- Marketplace Panel -->
+            <div class="panel" id="panel-marketplace">
+                <div style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;"><input id="marketSearch" placeholder="Search agents..." oninput="renderMarketplace()" style="flex:1;min-width:200px;background:var(--input);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);"><div id="filterPills"></div></div>
+                <div class="card-grid" id="marketGrid"></div>
+            </div>
+
+            <!-- Create Agent Panel -->
+            <div class="panel" id="panel-create">
+                <div class="card" style="max-width:700px;">
+                    <h3>🛠️ Create Agent</h3>
+                    <div style="display:flex;gap:12px;margin-top:12px;"><div class="input-group"><label>Name *</label><input id="agentName"></div><div class="input-group"><label>Category</label><select id="agentCat"><option value="">Select</option><option>Content</option><option>Code</option><option>Data</option><option>Creative</option><option>Business</option><option>Other</option></select></div></div>
+                    <textarea id="agentDesc" placeholder="Description" rows="2" style="width:100%;margin-top:12px;background:var(--input);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);"></textarea>
+                    <textarea id="agentPrompt" placeholder="System prompt (use {{variable}} for user inputs)" rows="4" style="width:100%;margin-top:12px;background:var(--input);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);"></textarea>
+                    <div style="display:flex;gap:12px;margin-top:12px;"><div class="input-group"><label>Provider</label><select id="agentProvider" onchange="updateModelDropdown()"></select></div><div class="input-group"><label>Model</label><select id="agentModel"></select></div></div>
+                    <div style="display:flex;gap:12px;margin-top:12px;"><div class="input-group"><label>Temperature <span id="tempVal">0.7</span></label><input type="range" id="agentTemp" min="0" max="2" step="0.1" value="0.7" oninput="document.getElementById('tempVal').textContent=this.value"></div><div class="input-group"><label>Max Tokens</label><input type="number" id="agentMaxTokens" value="1024" min="50" max="4096"></div></div>
+                    <!-- Published checkbox – only visible for admins -->
+                    <label id="publishedLabel" style="margin-top:12px;display:flex;align-items:center;gap:8px;font-weight:600;">
+                        <input type="checkbox" id="agentPublished" checked> Published (admin only)
+                    </label>
+                    <div style="display:flex;gap:10px;margin-top:12px;">
+                        <button class="btn btn-primary" onclick="saveAgent()" id="saveAgentBtn">💾 Save Agent</button>
+                        <button class="btn btn-outline" onclick="resetAgentForm()">🗑️ Reset</button>
+                    </div>
+                    <span id="agentEditId" style="display:none;"></span>
+                </div>
+                <div class="card" style="max-width:700px;margin-top:16px;"><h3>📝 My Agents</h3><div id="myAgents"></div></div>
+            </div>
+
+            <!-- Run Agent Panel -->
+            <div class="panel" id="panel-run">
+                <div class="card" style="max-width:700px;">
+                    <h3>▶️ Execute Agent</h3>
+                    <div class="input-group"><label>Select Agent</label><select id="runAgent" onchange="onRunSelect()"><option value="">— Choose —</option></select></div>
+                    <div id="runInputs" style="display:none;margin:12px 0;"></div>
+                    <!-- Always‑visible additional context input -->
+                    <div class="input-group" id="additionalContextGroup" style="display:none;">
+                        <label>Additional Context (optional)</label>
+                        <textarea id="additionalContext" rows="3" placeholder="Any extra instructions..."></textarea>
+                    </div>
+                    <button class="btn btn-primary" onclick="executeAgent()" id="execBtn">🚀 Run</button>
+                    <div id="runLoading" style="display:none;margin-top:12px;"><div class="skeleton" style="height:40px;width:200px;"></div></div>
+                    <div id="runOutput" style="display:none;margin-top:16px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;"><span>📤 Output</span><div><button class="btn btn-outline btn-sm" onclick="copyOutput()">📋 Copy</button><button class="btn btn-outline btn-sm" onclick="cancelExecution()" id="cancelBtn" style="display:none;">🛑 Cancel</button></div></div>
+                        <pre id="outputText" class="stream-text" style="background:var(--input);padding:16px;border-radius:8px;white-space:pre-wrap;max-height:300px;overflow-y:auto;margin-top:8px;"><span class="typewriter-cursor"></span></pre>
+                        <div id="execStats" style="font-size:0.8rem;color:var(--text2);margin-top:8px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admin Panel -->
+            <div class="panel" id="panel-admin">
+                <div class="card"><h3>Admin Dashboard</h3><div id="adminStats"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div class="modal-overlay" id="authModal" style="display:flex;">
+        <div class="modal" style="max-width:400px;">
+            <h3 id="authTitle">Welcome to AgentHub</h3>
+            <p style="color:var(--text2);margin-bottom:16px;">Sign in to manage AI agents with your own API keys</p>
+            <button class="btn btn-outline" onclick="signInWithGoogle()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;margin-bottom:12px;">
+                <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                Sign in with Google
+            </button>
+            <div style="display:flex;align-items:center;gap:10px;margin:10px 0;color:var(--text2);"><hr style="flex:1;border-color:var(--border);"><span>or</span><hr style="flex:1;border-color:var(--border);"></div>
+            <div id="authError" style="color:var(--red);font-size:0.8rem;margin-bottom:8px;display:none;"></div>
+            <div class="input-group"><label>Email</label><input type="email" id="authEmail" placeholder="you@example.com"></div>
+            <div class="input-group"><label>Password</label><input type="password" id="authPassword" placeholder="Enter password"></div>
+            <div class="input-group" id="authConfirmGroup" style="display:none;"><label>Confirm Password</label><input type="password" id="authConfirmPassword"></div>
+            <button class="btn btn-primary" onclick="handleEmailAuth()" style="width:100%;" id="authSubmitBtn">Sign In</button>
+            <p style="text-align:center;margin-top:12px;font-size:0.85rem;color:var(--text2);"><span id="authToggleText">Don't have an account?</span> <a href="#" onclick="toggleAuthMode()" style="color:var(--accent);text-decoration:none;">Sign Up</a></p>
+            <p style="text-align:center;margin-top:8px;"><a href="#" onclick="resetPassword()" style="color:var(--accent);font-size:0.8rem;">Forgot password?</a></p>
+        </div>
+    </div>
+
+    <!-- API Key Modal -->
+    <div class="modal-overlay" id="apiKeyModal" style="display:none;">
+        <div class="modal"><h3>Add API Key</h3>
+            <div class="input-group"><label>Provider</label><select id="keyProvider">
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="groq">Groq</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="together">Together AI</option>
+            </select></div>
+            <div class="input-group"><label>API Key</label><input id="keyValue" placeholder="sk-..."></div>
+            <div style="display:flex;gap:10px;"><button class="btn btn-primary" onclick="saveApiKey()">Save</button><button class="btn btn-outline" onclick="closeApiKeyModal()">Cancel</button></div>
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div class="modal-overlay" id="profileModal" style="display:none;">
+        <div class="modal">
+            <h3>👤 Profile</h3>
+            <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:16px;">
+                <img id="avatarPreview" class="avatar-preview" src="" alt="avatar" style="display:none;">
+                <div class="file-upload-wrapper" style="margin-top:8px;">
+                    <input type="file" id="avatarFile" accept="image/*" onchange="previewAvatar()">
+                    <button class="btn btn-outline btn-sm file-upload-trigger" onclick="document.getElementById('avatarFile').click();">📷 Choose Photo</button>
+                    <span class="selected-file-name" id="selectedFileName"></span>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="uploadAvatar()" style="margin-top:8px;">Upload Photo</button>
+            </div>
+            <div class="input-group"><label>Display Name</label><input id="profileName"></div>
+            <div class="input-group"><label>Email</label><input id="profileEmail"></div>
+            <div id="emailChangeAuth" style="display:none;border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:8px;">
+                <p style="font-size:0.8rem;color:var(--text2);">Re‑enter your password to change email</p>
+                <input type="password" id="emailChangePass" placeholder="Current password" style="margin:5px 0;">
+                <button class="btn btn-primary btn-sm" onclick="confirmEmailChange()">Verify & Change</button>
+                <div id="emailChangeError" style="color:var(--red);font-size:0.75rem;margin-top:4px;"></div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:12px;"><button class="btn btn-primary" onclick="updateProfile()">Save</button><button class="btn btn-outline" onclick="closeProfile()">Close</button></div>
+            <hr style="border-color:var(--border);margin:16px 0;">
+            <h4>Change Password</h4>
+            <div class="input-group"><label>Current Password</label><input type="password" id="currentPass"></div>
+            <div class="input-group"><label>New Password</label><input type="password" id="newPass"></div>
+            <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
+            <div id="passError" style="color:var(--red);font-size:0.8rem;margin-top:4px;"></div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal-overlay" id="confirmModal" style="display:none;">
+        <div class="modal"><h3 id="confirmTitle">Are you sure?</h3><p id="confirmMsg"></p><div style="display:flex;gap:10px;justify-content:flex-end;"><button class="btn btn-outline" onclick="closeConfirm()">Cancel</button><button class="btn btn-danger" id="confirmActionBtn">Confirm</button></div></div>
+    </div>
+
+    <div id="toastContainer" style="position:fixed;top:20px;right:20px;z-index:300;display:flex;flex-direction:column;gap:8px;"></div>
+
+    <script>
+        // ==================== FIREBASE CONFIG ====================
+        const firebaseConfig = {
+            apiKey: "AIzaSyCOMGBueEVfJk3Y1L7BXsZW6CWzY5rBK8o",
+            authDomain: "agenthub-685de.firebaseapp.com",
+            databaseURL: "https://agenthub-685de-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "agenthub-685de",
+            storageBucket: "agenthub-685de.firebasestorage.app",
+            messagingSenderId: "604804207720",
+            appId: "1:604804207720:web:72357641aa7317825a97dd"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const rtdb = firebase.database();
+
+        // ImgBB API key
+        const IMGBB_API_KEY = '77fc3241b7ec74f3a68a13fdb54ce91a';
+        const IMGBB_UPLOAD_URL = 'https://api.imgbb.com/1/upload';
+
+        // ==================== GLOBAL STATE ====================
+        let currentUser = null, profile = null, agents = [], usage = [], apiKeys = [], activePanel = 'dashboard', isLogin = true, editAgentId = null, abortController = null;
+        // For push notifications
+        let prevPublishedMap = {};
+
+        const $ = id => document.getElementById(id);
+        const q = s => document.querySelector(s);
+        const qa = s => document.querySelectorAll(s);
+        const toast = (msg, type='success') => {
+            const t = document.createElement('div'); t.className=`toast toast-${type}`; t.textContent=msg;
+            $('toastContainer').appendChild(t); setTimeout(()=>t.remove(),3000);
+        };
+
+        // ==================== AUTH ====================
+        let unsubAgents = null;
+
+        auth.onAuthStateChanged(async user => {
+            if (user) {
+                currentUser = user; $('authModal').style.display='none';
+                db.collection('users').doc(user.uid).onSnapshot(doc => {
+                    if (!doc.exists) {
+                        const p = { email:user.email, displayName:user.displayName||user.email.split('@')[0], photoURL:user.photoURL, role:'user', totalRuns:0, suspended:false, createdAt:firebase.firestore.FieldValue.serverTimestamp() };
+                        db.collection('users').doc(user.uid).set(p);
+                        profile = { id:user.uid, ...p };
+                    } else profile = { id:doc.id, ...doc.data() };
+                    refreshUI();
+                    attachAgentsListener(); // re‑attach whenever profile changes
+                    // Request notification permission
+                    if (Notification.permission === 'default') Notification.requestPermission();
+                });
+                db.collection('apiKeys').where('userId','==',user.uid).onSnapshot(snap => {
+                    apiKeys = snap.docs.map(d=>({id:d.id,...d.data()}));
+                    updateApiKeyUI();
+                    updateProviderDropdown();
+                    updateModelDropdown();
+                });
+                db.collection('usage').where('userId','==',user.uid).orderBy('timestamp','desc').limit(20).onSnapshot(snap => {
+                    usage = snap.docs.map(d=>({id:d.id,...d.data()}));
+                    renderDashboard();
+                });
+                rtdb.ref(`presence/${user.uid}`).set({ online:true, lastSeen:firebase.database.ServerValue.TIMESTAMP, email:user.email });
+                rtdb.ref(`presence/${user.uid}`).onDisconnect().update({ online:false });
+            } else {
+                currentUser = null; profile = null; agents = []; usage = []; apiKeys = [];
+                if (unsubAgents) { unsubAgents(); unsubAgents = null; }
+                $('authModal').style.display='flex';
+            }
+        });
+
+        function attachAgentsListener() {
+            if (unsubAgents) unsubAgents();
+            // Fetch all agents (no where clause) – avoids index requirement
+            const query = db.collection('agents').orderBy('createdAt', 'desc');
+            unsubAgents = query.onSnapshot(snap => {
+                const allAgents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                // Admin sees everything, normal users see only published
+                if (profile && profile.role === 'admin') {
+                    agents = allAgents;
+                } else {
+                    agents = allAgents.filter(a => a.published === true);
+                }
+                // Check for approval notifications (only for the agent creator)
+                allAgents.forEach(a => {
+                    const prev = prevPublishedMap[a.id];
+                    if (prev === false && a.published === true && a.creatorId === currentUser?.uid && Notification.permission === 'granted') {
+                        new Notification('Agent Approved! ✅', {
+                            body: `Your agent "${a.name}" is now live on the marketplace.`,
+                            icon: '/favicon.ico'
+                        });
+                    }
+                    prevPublishedMap[a.id] = a.published;
+                });
+                refreshLists();
+            }, error => {
+                console.error('Agent listener error:', error);
+                if (error.code === 'permission-denied') toast('Permission error. Check Firestore rules.', 'error');
+            });
+        }
+
+        async function signInWithGoogle() { try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); } catch(e) { if(e.code!=='auth/popup-closed-by-user') toast('Google sign-in failed','error'); } }
+        function toggleAuthMode() {
+            isLogin = !isLogin;
+            $('authTitle').textContent = isLogin?'Welcome':'Create Account';
+            $('authSubmitBtn').textContent = isLogin?'Sign In':'Sign Up';
+            $('authToggleText').textContent = isLogin?"Don't have an account?":'Already have an account?';
+            $('authConfirmGroup').style.display = isLogin?'none':'flex';
+        }
+        async function handleEmailAuth() {
+            const email = ($('authEmail').value||'').trim(), pass = $('authPassword').value;
+            $('authError').style.display='none';
+            if (!email || !pass) { $('authError').textContent='Fill all fields'; $('authError').style.display='block'; return; }
+            try {
+                if (isLogin) await auth.signInWithEmailAndPassword(email,pass);
+                else {
+                    if (pass !== $('authConfirmPassword').value) { $('authError').textContent='Passwords mismatch'; $('authError').style.display='block'; return; }
+                    await auth.createUserWithEmailAndPassword(email,pass);
+                }
+            } catch(e) { $('authError').textContent = e.message; $('authError').style.display='block'; }
+        }
+        async function resetPassword() {
+            const email = ($('authEmail').value||'').trim();
+            if (!email) return toast('Enter email','error');
+            try { await auth.sendPasswordResetEmail(email); toast('Reset email sent'); } catch(e) { toast(e.message,'error'); }
+        }
+        function confirmLogout() { showConfirm('Sign out?','', async()=>{ await auth.signOut(); }); }
+
+        // ==================== UI REFRESH ====================
+        function refreshUI() {
+            if (!currentUser) return;
+            const avatar = profile?.photoURL || currentUser.photoURL;
+            $('userAvatar').innerHTML = avatar ? `<img src="${avatar}" style="width:100%;height:100%;object-fit:cover;">` : currentUser.email.charAt(0).toUpperCase();
+            $('adminNav').style.display = profile?.role === 'admin' ? 'flex' : 'none';
+            $('publishedLabel').style.display = profile?.role === 'admin' ? 'flex' : 'none';
+            if (profile?.role !== 'admin') $('agentPublished').checked = false;
+            renderDashboard(); renderMarketplace(); renderMyAgents(); populateRunSelect(); updateProviderDropdown();
+        }
+
+        // ==================== DASHBOARD ====================
+        function renderDashboard() {
+            if (!profile) return;
+            $('statRuns').textContent = profile.totalRuns || 0;
+            $('statAgents').textContent = agents.filter(a=>a.published).length;
+            $('statMyAgents').textContent = agents.filter(a=>a.creatorId===currentUser.uid).length;
+            updateApiKeyUI();
+            $('recentUsage').innerHTML = usage.slice(0,5).map(u => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span>${u.agentName}</span><span class="badge badge-green">${u.status||'completed'}</span></div>`).join('') || '<div style="color:var(--text2);">No usage yet</div>';
+        }
+        function updateApiKeyUI() {
+            const list = $('apikeysList');
+            if (!apiKeys.length) { list.innerHTML = '<div style="color:var(--text2);">No API keys added yet.</div>'; $('statApi').innerHTML = '<span style="color:var(--orange);">No keys</span>'; return; }
+            list.innerHTML = apiKeys.map(k => `<div style="display:flex;justify-content:space-between;padding:6px 0;"><span>${k.provider.toUpperCase()}</span><span class="badge ${k.isValid!==false?'badge-green':'badge-orange'}">${k.isValid!==false?'Valid':'Invalid'}</span><button class="btn btn-outline btn-sm" onclick="deleteApiKey('${k.id}')">🗑️</button></div>`).join('');
+            $('statApi').innerHTML = apiKeys.filter(k=>k.isValid!==false).length ? `<span class="badge badge-green">${apiKeys.filter(k=>k.isValid!==false).length} connected</span>` : '<span style="color:var(--orange);">No valid keys</span>';
+        }
+
+        // ==================== API KEYS ====================
+        function openApiKeyModal() { $('apiKeyModal').style.display='flex'; }
+        function closeApiKeyModal() { $('apiKeyModal').style.display='none'; }
+        async function saveApiKey() {
+            const provider = $('keyProvider').value;
+            const key = $('keyValue').value.trim();
+            if (!key) return toast('Enter API key','error');
+            const existing = apiKeys.find(k => k.provider === provider);
+            try {
+                if (existing) {
+                    await db.collection('apiKeys').doc(existing.id).update({
+                        key: key,
+                        isValid: true,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    toast('API key updated');
+                } else {
+                    await db.collection('apiKeys').add({
+                        userId: currentUser.uid,
+                        provider,
+                        key,
+                        isValid: true,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    toast('API key added');
+                }
+                $('keyValue').value = '';
+                $('apiKeyModal').style.display = 'none';
+            } catch(e) { toast('Save failed: '+e.message,'error'); }
+        }
+        function deleteApiKey(id) { db.collection('apiKeys').doc(id).delete(); }
+
+        // ==================== PROVIDER/MODEL DYNAMICS ====================
+        const PROVIDER_MODELS = {
+            openai: ["gpt-4o","gpt-4.1","gpt-4-turbo","gpt-3.5-turbo"],
+            anthropic: ["claude-3-opus","claude-3.5-sonnet","claude-3-haiku"],
+            gemini: ["gemini-1.5-pro","gemini-1.5-flash","gemini-1.0-pro"],
+            groq: ["llama3-70b-8192","mixtral-8x7b-32768","gemma-7b-it"],
+            openrouter: ["openai/gpt-4o","anthropic/claude-3.5-sonnet","google/gemini-pro-1.5","meta-llama/llama-3-70b-instruct"],
+            deepseek: ["deepseek-chat","deepseek-coder"],
+            together: ["mistralai/Mixtral-8x7B-Instruct-v0.1","meta-llama/Llama-3-70b-chat-hf","google/gemma-7b-it"]
+        };
+        async function fetchProviderModels(provider, apiKey) {
+            if (!['openai','gemini','openrouter','deepseek','together'].includes(provider)) return PROVIDER_MODELS[provider] || [];
+            const endpoints = {
+                openai: 'https://api.openai.com/v1/models',
+                gemini: `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+                openrouter: 'https://openrouter.ai/api/v1/models',
+                deepseek: 'https://api.deepseek.com/v1/models',
+                together: 'https://api.together.xyz/v1/models'
+            };
+            const headers = provider === 'gemini' ? {} : { 'Authorization': `Bearer ${apiKey}` };
+            try {
+                const res = await fetch(endpoints[provider], { headers });
+                if (!res.ok) throw new Error(`Status ${res.status}`);
+                const data = await res.json();
+                let models = [];
+                if (provider === 'openai') models = data.data.filter(m => m.id.includes('gpt')).map(m => m.id);
+                else if (provider === 'openrouter') models = data.data.map(m => m.id);
+                else if (provider === 'gemini') models = (data.models||[]).filter(m => m.name.includes('gemini')).map(m => m.name.replace('models/',''));
+                else models = data.data?.map(m => m.id) || [];
+                return models.length ? models : PROVIDER_MODELS[provider] || [];
+            } catch(e) { console.warn(`Failed to fetch ${provider} models`, e); return PROVIDER_MODELS[provider] || []; }
+        }
+
+        function updateProviderDropdown() {
+            const providers = [...new Set(apiKeys.filter(k=>k.isValid!==false).map(k=>k.provider))];
+            const sel = $('agentProvider');
+            sel.innerHTML = '<option value="">— Select provider —</option>';
+            providers.forEach(p => { const opt = document.createElement('option'); opt.value=p; opt.textContent=p.charAt(0).toUpperCase()+p.slice(1); sel.appendChild(opt); });
+            updateModelDropdown();
+        }
+        async function updateModelDropdown() {
+            const provider = $('agentProvider').value;
+            const sel = $('agentModel');
+            sel.innerHTML = '<option value="">Loading…</option>';
+            if (!provider) { sel.innerHTML = ''; return; }
+            const apiKeyObj = apiKeys.find(k => k.provider === provider && k.isValid!==false);
+            let models = [];
+            if (apiKeyObj) models = await fetchProviderModels(provider, apiKeyObj.key);
+            else models = PROVIDER_MODELS[provider] || [];
+            sel.innerHTML = '';
+            models.forEach(m => sel.add(new Option(m, m)));
+            if (!models.length) sel.add(new Option('No models available', ''));
+        }
+
+        // ==================== AGENT CRUD ====================
+        function resetAgentForm() {
+            $('agentName').value = $('agentDesc').value = $('agentPrompt').value = '';
+            $('agentCat').value = ''; $('agentProvider').value = ''; $('agentModel').innerHTML = '';
+            $('agentTemp').value = 0.7; $('agentMaxTokens').value = 1024;
+            $('agentPublished').checked = (profile?.role === 'admin');
+            editAgentId = null;
+            $('tempVal').textContent = '0.7';
+        }
+        async function saveAgent() {
+            const name = ($('agentName').value||'').trim(), cat = $('agentCat').value, desc = ($('agentDesc').value||'').trim();
+            const prompt = ($('agentPrompt').value||'').trim(), provider = $('agentProvider').value, model = $('agentModel').value;
+            const temp = parseFloat($('agentTemp').value), maxTokens = parseInt($('agentMaxTokens').value);
+            const published = (profile?.role === 'admin') ? $('agentPublished').checked : false;
+            if (!name || !provider || !model || !prompt) return toast('Fill all required fields','error');
+            const data = { name, category:cat, description:desc, prompt, provider, model, temperature:temp, maxTokens, published, creatorId:currentUser.uid, creatorEmail:currentUser.email, updatedAt:firebase.firestore.FieldValue.serverTimestamp() };
+            try {
+                if (editAgentId) {
+                    await db.collection('agents').doc(editAgentId).update(data);
+                    toast('Agent updated');
+                } else {
+                    data.createdAt = firebase.firestore.FieldValue.serverTimestamp(); data.runCount=0;
+                    await db.collection('agents').add(data);
+                    toast(published ? 'Agent created & published' : 'Agent submitted for review (pending)');
+                }
+                resetAgentForm();
+            } catch(e) { toast('Save error: '+e.message,'error'); }
+        }
+        function editAgent(id) {
+            const agent = agents.find(a => a.id === id);
+            if (!agent) return;
+            if (agent.creatorId !== currentUser.uid && profile?.role !== 'admin') return;
+            editAgentId = id;
+            $('agentName').value = agent.name; $('agentCat').value = agent.category||'';
+            $('agentDesc').value = agent.description||''; $('agentPrompt').value = agent.prompt;
+            $('agentProvider').value = agent.provider;
+            updateModelDropdown().then(() => { $('agentModel').value = agent.model; });
+            $('agentTemp').value = agent.temperature; $('agentMaxTokens').value = agent.maxTokens;
+            $('agentPublished').checked = agent.published; $('tempVal').textContent = agent.temperature;
+            navigate('create');
+        }
+        async function deleteAgent(id) {
+            showConfirm('Delete agent?','Permanent.', async()=>{ await db.collection('agents').doc(id).delete(); });
+        }
+
+        function renderMyAgents() {
+            const my = agents.filter(a=>a.creatorId===currentUser?.uid);
+            $('myAgents').innerHTML = my.length ? my.map(a => `
+                <div class="card animate-fade-in-up" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <strong>${a.name}</strong> 
+                        <span class="badge badge-purple">${a.provider}</span>
+                        <span class="badge ${a.published?'badge-green':'badge-pending'}">${a.published?'Published':'Pending'}</span>
+                    </div>
+                    <div>
+                        <button class="btn btn-outline btn-sm" onclick="editAgent('${a.id}')">✏️</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteAgent('${a.id}')">🗑️</button>
+                    </div>
+                </div>`).join('') : '<div style="color:var(--text2);">No agents yet.</div>';
+        }
+
+        // ==================== MARKETPLACE ====================
+        function renderMarketplace() {
+            const search = ($('marketSearch')?.value||'').toLowerCase();
+            const activeCat = q('.filter-pill.active')?.dataset.cat || 'all';
+            let filtered = agents.filter(a=>a.published);
+            if (activeCat!=='all') filtered = filtered.filter(a=>a.category===activeCat);
+            if (search) filtered = filtered.filter(a=>a.name.toLowerCase().includes(search)||a.description?.toLowerCase().includes(search));
+            $('marketGrid').innerHTML = filtered.map(a => `<div class="card animate-fade-in-up" style="display:flex;flex-direction:column;gap:8px;">
+                <div><h4>${a.name}</h4><span class="badge badge-purple">${a.provider}</span></div>
+                <p style="color:var(--text2);">${a.description?.slice(0,80)||''}</p>
+                <button class="btn btn-primary btn-sm" onclick="selectAgentToRun('${a.id}')">▶ Run</button>
+            </div>`).join('') || '<div style="grid-column:1/-1;text-align:center;color:var(--text2);">No agents found.</div>';
+            const cats = ['all', ...new Set(agents.filter(a=>a.published).map(a=>a.category))];
+            $('filterPills').innerHTML = cats.map(c => `<button class="btn btn-outline btn-sm filter-pill${activeCat===c?' active':''}" data-cat="${c}" onclick="setCatFilter('${c}',this)">${c==='all'?'All':c}</button>`).join('');
+        }
+        function setCatFilter(cat, el) { qa('.filter-pill').forEach(p=>p.classList.remove('active')); el.classList.add('active'); renderMarketplace(); }
+
+        // ==================== RUN AGENT ====================
+        function populateRunSelect() { $('runAgent').innerHTML = '<option value="">— Choose —</option>' + agents.filter(a=>a.published).map(a => `<option value="${a.id}">${a.name} (${a.provider})</option>`).join(''); }
+        function selectAgentToRun(id) { $('runAgent').value = id; onRunSelect(); navigate('run'); }
+        function onRunSelect() {
+            const id = $('runAgent').value;
+            if (!id) {
+                $('runInputs').style.display='none';
+                $('additionalContextGroup').style.display='none';
+                return;
+            }
+            const agent = agents.find(a=>a.id===id);
+            if (!agent) return;
+            $('runInputs').style.display='block';
+            $('additionalContextGroup').style.display='block';
+            const vars = [...agent.prompt.matchAll(/\{\{(.+?)\}\}/g)].map(m=>m[1].trim());
+            $('runInputs').innerHTML = vars.map(v => `<div class="input-group"><label>${v}</label><input class="run-input" data-var="${v}"></div>`).join('') || '<div>No input variables needed.</div>';
+            $('additionalContext').value = '';
+        }
+        async function executeAgent() {
+            if (profile?.suspended) return toast('Account suspended','error');
+            const agentId = $('runAgent').value, agent = agents.find(a=>a.id===agentId);
+            if (!agent) return toast('Select agent','error');
+            const vars = {}; qa('.run-input').forEach(el => vars[el.dataset.var] = el.value.trim());
+            let finalPrompt = agent.prompt;
+            Object.entries(vars).forEach(([k,v]) => finalPrompt = finalPrompt.replace(new RegExp(`\\{\\{\\s*${k}\\s*\\}\\}`,'gi'), v||''));
+            const additionalContext = $('additionalContext').value.trim();
+            if (additionalContext) finalPrompt += '\n\n[Additional Context]\n' + additionalContext;
+            const apiKey = apiKeys.find(k=>k.provider===agent.provider && k.isValid!==false);
+            if (!apiKey) return toast(`No valid ${agent.provider} API key`,'error');
+            $('runOutput').style.display='block'; $('outputText').innerHTML = '<span class="typewriter-cursor"></span>'; $('execStats').textContent='';
+            $('runLoading').style.display='block'; $('execBtn').disabled=true; $('cancelBtn').style.display='inline-block';
+            abortController = new AbortController();
+            const startTime = Date.now();
+            try {
+                let endpoint, headers, body;
+                switch (agent.provider) {
+                    case 'openai': endpoint='https://api.openai.com/v1/chat/completions'; headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey.key}`}; body=JSON.stringify({model:agent.model,messages:[{role:'system',content:finalPrompt}],temperature:agent.temperature,max_tokens:agent.maxTokens,stream:true}); break;
+                    case 'groq': endpoint='https://api.groq.com/openai/v1/chat/completions'; headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey.key}`}; body=JSON.stringify({model:agent.model,messages:[{role:'system',content:finalPrompt}],temperature:agent.temperature,max_tokens:agent.maxTokens,stream:true}); break;
+                    case 'openrouter': endpoint='https://openrouter.ai/api/v1/chat/completions'; headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey.key}`}; body=JSON.stringify({model:agent.model,messages:[{role:'system',content:finalPrompt}],temperature:agent.temperature,max_tokens:agent.maxTokens,stream:true}); break;
+                    case 'anthropic': endpoint='https://api.anthropic.com/v1/messages'; headers={'Content-Type':'application/json','x-api-key':apiKey.key,'anthropic-version':'2023-06-01'}; body=JSON.stringify({model:agent.model,max_tokens:agent.maxTokens,temperature:agent.temperature,system:finalPrompt,messages:[{role:'user',content:finalPrompt}],stream:true}); break;
+                    case 'gemini': endpoint=`https://generativelanguage.googleapis.com/v1beta/models/${agent.model}:streamGenerateContent?key=${apiKey.key}`; headers={'Content-Type':'application/json'}; body=JSON.stringify({contents:[{parts:[{text:finalPrompt}]}],generationConfig:{temperature:agent.temperature,maxOutputTokens:agent.maxTokens}}); break;
+                    case 'deepseek': endpoint='https://api.deepseek.com/v1/chat/completions'; headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey.key}`}; body=JSON.stringify({model:agent.model,messages:[{role:'system',content:finalPrompt}],temperature:agent.temperature,max_tokens:agent.maxTokens,stream:true}); break;
+                    case 'together': endpoint='https://api.together.xyz/v1/chat/completions'; headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey.key}`}; body=JSON.stringify({model:agent.model,messages:[{role:'system',content:finalPrompt}],temperature:agent.temperature,max_tokens:agent.maxTokens,stream:true}); break;
+                    default: throw new Error('Unsupported provider');
+                }
+                const res = await fetch(endpoint,{method:'POST',headers,body,signal:abortController.signal});
+                if (!res.ok) throw new Error(`API error ${res.status}`);
+                const reader = res.body.getReader(), decoder = new TextDecoder();
+                let fullText = '';
+                while (true) {
+                    const {done,value} = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n').filter(l=>l.startsWith('data: '));
+                    for (const line of lines) {
+                        const data = line.slice(6).trim();
+                        if (data === '[DONE]') break;
+                        try { const token = JSON.parse(data).choices?.[0]?.delta?.content || ''; fullText += token; } catch(e){}
+                    }
+                }
+                $('outputText').textContent = fullText;
+                $('execStats').textContent = `Latency: ${Date.now()-startTime}ms | Model: ${agent.model}`;
+                await db.collection('usage').add({userId:currentUser.uid,agentId:agent.id,agentName:agent.name,prompt:finalPrompt,output:fullText,model:agent.model,tokensInput:finalPrompt.length,tokensOutput:fullText.length,latencyMs:Date.now()-startTime,status:'completed',timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+                await db.collection('agents').doc(agent.id).update({ runCount:firebase.firestore.FieldValue.increment(1) });
+                await db.collection('users').doc(currentUser.uid).update({ totalRuns:firebase.firestore.FieldValue.increment(1) });
+            } catch(e) {
+                if (e.name!=='AbortError') { $('outputText').textContent = `Error: ${e.message}`; toast('Execution failed','error'); }
+            } finally { $('runLoading').style.display='none'; $('execBtn').disabled=false; $('cancelBtn').style.display='none'; abortController=null; }
+        }
+        function cancelExecution() { if (abortController) abortController.abort(); }
+        function copyOutput() { navigator.clipboard.writeText($('outputText').textContent); toast('Copied!'); }
+
+        // ==================== PROFILE & AVATAR ====================
+        function openProfile() {
+            if (!profile) return;
+            $('profileName').value = profile.displayName || '';
+            $('profileEmail').value = currentUser.email;
+            $('emailChangeAuth').style.display = 'none';
+            $('emailChangePass').value = ''; $('emailChangeError').textContent = '';
+            if (profile.photoURL) { $('avatarPreview').src = profile.photoURL; $('avatarPreview').style.display='block'; }
+            else $('avatarPreview').style.display='none';
+            $('selectedFileName').textContent = '';
+            $('profileModal').style.display='flex';
+        }
+        function closeProfile() { $('profileModal').style.display='none'; }
+        function previewAvatar() {
+            const file = $('avatarFile').files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = e => { $('avatarPreview').src = e.target.result; $('avatarPreview').style.display='block'; };
+                reader.readAsDataURL(file);
+                $('selectedFileName').textContent = file.name;
+            } else { $('selectedFileName').textContent = ''; }
+        }
+        async function uploadAvatar() {
+            const file = $('avatarFile').files[0];
+            if (!file) return toast('Select an image','error');
+            const formData = new FormData(); formData.append('image', file);
+            try {
+                const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, { method:'POST', body:formData });
+                const data = await res.json();
+                if (data.success) {
+                    await db.collection('users').doc(currentUser.uid).update({ photoURL: data.data.url });
+                    toast('Avatar uploaded!'); profile.photoURL = data.data.url;
+                    refreshUI(); closeProfile();
+                } else toast('Upload failed','error');
+            } catch(e) { toast('Upload error','error'); }
+        }
+        async function updateProfile() {
+            const name = ($('profileName').value||'').trim();
+            const newEmail = ($('profileEmail').value||'').trim();
+            if (newEmail !== currentUser.email) { $('emailChangeAuth').style.display = 'block'; return; }
+            await db.collection('users').doc(currentUser.uid).update({ displayName: name });
+            toast('Profile updated'); closeProfile();
+        }
+        async function confirmEmailChange() {
+            const newEmail = ($('profileEmail').value||'').trim();
+            const password = $('emailChangePass').value;
+            if (!password) { $('emailChangeError').textContent = 'Enter your password'; return; }
+            try {
+                const credential = firebase.auth.EmailAuthProvider.credential(currentUser.email, password);
+                await currentUser.reauthenticateWithCredential(credential);
+                await currentUser.updateEmail(newEmail);
+                await db.collection('users').doc(currentUser.uid).update({ displayName: ($('profileName').value||'').trim() });
+                toast('Email updated!'); closeProfile();
+            } catch(e) { $('emailChangeError').textContent = e.message; }
+        }
+        async function changePassword() {
+            const curr = $('currentPass').value, newP = $('newPass').value;
+            if (!curr || !newP) { $('passError').textContent = 'Fill both fields'; return; }
+            try {
+                const credential = firebase.auth.EmailAuthProvider.credential(currentUser.email, curr);
+                await currentUser.reauthenticateWithCredential(credential);
+                await currentUser.updatePassword(newP);
+                toast('Password changed!'); $('currentPass').value = $('newPass').value = '';
+            } catch(e) { $('passError').textContent = e.message; }
+        }
+
+        // ==================== ADMIN ====================
+        function renderAdmin() {
+            if (!profile || profile.role !== 'admin') { $('panel-admin').innerHTML = '<div class="card">Access Denied</div>'; return; }
+            db.collection('users').get().then(snap => {
+                const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                let html = `<h4>Users (${users.length})</h4><table style="width:100%"><tr><th>Email</th><th>Role</th><th>Runs</th><th>Suspended</th><th>Action</th></tr>`;
+                users.forEach(u => html += `<tr><td>${u.email}</td><td>${u.role||'user'}</td><td>${u.totalRuns||0}</td><td>${u.suspended?'Yes':'No'}</td><td><button class="btn btn-sm ${u.suspended?'btn-outline':'btn-danger'}" onclick="toggleSuspendUser('${u.id}',${!u.suspended})">${u.suspended?'Unsuspend':'Suspend'}</button></td></tr>`);
+                html += '</table>';
+
+                const pendingAgents = agents.filter(a => !a.published);
+                const publishedAgents = agents.filter(a => a.published);
+
+                html += `<h4 style="margin-top:20px;">⏳ Pending Agents (${pendingAgents.length})</h4>`;
+                if (pendingAgents.length) {
+                    pendingAgents.forEach(a => html += `<div style="margin:8px 0;display:flex;justify-content:space-between;align-items:center;" class="animate-fade-in-up">
+                        <span><strong>${a.name}</strong> by ${a.creatorEmail||'Unknown'}</span>
+                        <div style="display:flex;gap:6px;">
+                            <button class="btn btn-sm btn-primary" onclick="approveAgent('${a.id}')">✅ Accept</button>
+                            <button class="btn btn-sm btn-danger" onclick="rejectAgent('${a.id}')">❌ Reject</button>
+                            <button class="btn btn-sm btn-outline" onclick="editAgent('${a.id}')">✏️ Edit</button>
+                            <button class="btn btn-sm btn-outline" onclick="cloneAgent('${a.id}')">📋 Clone</button>
+                            <button class="btn btn-sm btn-outline" onclick="previewAgent('${a.id}')">👁️ Preview</button>
+                        </div>
+                    </div>`);
+                } else html += '<div style="color:var(--text2);">No pending agents.</div>';
+
+                html += `<h4 style="margin-top:20px;">📢 Published Agents (${publishedAgents.length})</h4>`;
+                if (publishedAgents.length) {
+                    publishedAgents.forEach(a => html += `<div style="margin:8px 0;display:flex;justify-content:space-between;align-items:center;" class="animate-fade-in-up">
+                        <span><strong>${a.name}</strong> by ${a.creatorEmail||'Unknown'}</span>
+                        <button class="btn btn-sm btn-outline" onclick="togglePublishAgent('${a.id}',false)">Unpublish</button>
+                    </div>`);
+                } else html += '<div style="color:var(--text2);">No published agents.</div>';
+
+                $('adminStats').innerHTML = html;
+            });
+        }
+
+        async function approveAgent(agentId) {
+            await db.collection('agents').doc(agentId).update({ published: true });
+            toast('Agent approved & published');
+            renderMarketplace();
+        }
+        async function rejectAgent(agentId) {
+            await db.collection('agents').doc(agentId).delete();
+            toast('Agent rejected and deleted');
+            renderMarketplace();
+        }
+        async function cloneAgent(agentId) {
+            const original = agents.find(a => a.id === agentId);
+            if (!original) return;
+            const { id, createdAt, runCount, ...rest } = original;
+            await db.collection('agents').add({
+                ...rest,
+                name: rest.name + ' (Copy)',
+                published: false,
+                runCount: 0,
+                creatorId: currentUser.uid,
+                creatorEmail: currentUser.email,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            toast('Agent cloned');
+        }
+        function previewAgent(agentId) {
+            const agent = agents.find(a => a.id === agentId);
+            if (!agent) return;
+            alert(`Agent Details:\n\nName: ${agent.name}\nProvider: ${agent.provider}\nModel: ${agent.model}\nDescription: ${agent.description}\nPrompt: ${agent.prompt.slice(0, 300)}...`);
+        }
+
+        async function toggleSuspendUser(uid, suspend) { await db.collection('users').doc(uid).update({ suspended: suspend }); toast(suspend?'Suspended':'Activated'); renderAdmin(); }
+        async function togglePublishAgent(agentId, publish) { await db.collection('agents').doc(agentId).update({ published: publish }); toast(publish?'Published':'Unpublished'); renderMarketplace(); }
+
+        // ==================== NAVIGATION ====================
+        function navigate(panel, el) {
+            activePanel = panel;
+            qa('.panel').forEach(p=>p.classList.remove('active'));
+            $(`panel-${panel}`).classList.add('active');
+            qa('.nav-item').forEach(n=>n.classList.remove('active'));
+            if (el) el.classList.add('active');
+            else { const found = q(`.nav-item[data-panel="${panel}"]`); if(found) found.classList.add('active'); }
+            $('pageTitle').textContent = {dashboard:'Dashboard',marketplace:'Marketplace',create:'Create Agent',run:'Run Agent',admin:'Admin'}[panel];
+            if (panel==='marketplace') renderMarketplace();
+            if (panel==='run') populateRunSelect();
+            if (panel==='admin') renderAdmin();
+            closeMobileSidebar();
+        }
+        function toggleTheme() { const cur=document.documentElement.getAttribute('data-theme'),nxt=cur==='dark'?'light':'dark'; document.documentElement.setAttribute('data-theme',nxt); $('themeBtn').textContent=nxt==='dark'?'☀️':'🌙'; }
+        function toggleMobileSidebar() {
+            const sidebar = $('sidebar');
+            if (sidebar.classList.contains('mobile-open')) closeMobileSidebar();
+            else { sidebar.classList.add('mobile-open'); $('sidebarOverlay').classList.add('show'); }
+        }
+        function closeMobileSidebar() { $('sidebar').classList.remove('mobile-open'); $('sidebarOverlay').classList.remove('show'); }
+
+        function showConfirm(title,msg,action) { $('confirmTitle').textContent=title; $('confirmMsg').textContent=msg; $('confirmActionBtn').onclick=()=>{action();closeConfirm();}; $('confirmModal').style.display='flex'; }
+        function closeConfirm() { $('confirmModal').style.display='none'; }
+
+        document.addEventListener('DOMContentLoaded', () => document.documentElement.setAttribute('data-theme', localStorage.getItem('theme')||'dark'));
+        function refreshLists() { renderMarketplace(); renderMyAgents(); populateRunSelect(); if (activePanel==='admin') renderAdmin(); }
+    </script>
+</body>
+</html>
